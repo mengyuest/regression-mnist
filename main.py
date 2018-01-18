@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import numpy.matlib
 from config import cf
@@ -13,10 +14,12 @@ class ExperimentResult:
         self.train_err=[]
         self.valid_err=[]
         self.test_err=[]
+        self.w_length=[]
         self.best_train_err = 0
         self.best_valid_err = 0
         self.best_test_err = 0
-        self.weight_value = 0
+        self.w_value = 0
+        self.avg_x=0
 
 def load_data():
 
@@ -91,7 +94,7 @@ def gradient_descent_method():
 """
 Logistic Regression
 """
-def logistic_regression(total_train_images,total_train_labels,total_test_images,total_test_labels,order=0):
+def logistic_regression(total_train_images,total_train_labels,total_test_images,total_test_labels):
 
     train_images,train_labels,valid_images,valid_labels,test_images,test_labels = \
         logistic_preprocessing(total_train_images, total_train_labels,
@@ -101,9 +104,10 @@ def logistic_regression(total_train_images,total_train_labels,total_test_images,
     m = np.shape(train_images)[1]
 
     eta=cf.lg_eta
-    error_cnt=0
     error_tol=cf.lg_error_tol
+    order=cf.lg_reg
 
+    error_cnt = 0
     prev_err=100
     t=0
     T=cf.lg_T
@@ -154,6 +158,7 @@ def logistic_regression(total_train_images,total_train_labels,total_test_images,
         res.train_err.append(train_err)
         res.valid_err.append(valid_err)
         res.test_err.append(test_err)
+        res.w_length.append(np.linalg.norm(w))
 
         if cf.debug:
             print("Epoch",t,"train_err","{0:.2%}".format(train_err),
@@ -168,7 +173,7 @@ def logistic_regression(total_train_images,total_train_labels,total_test_images,
     print()
 
     weightPlot(bestw,cf.lg_header+"_"+str(cf.select_num1)+"_"+str(cf.select_num2))
-    res.weight_value=bestw
+    res.w_value=bestw
     res.best_train_err=best_tr_err
     res.best_valid_err=best_va_err
     res.best_test_err=best_te_err
@@ -208,7 +213,7 @@ def logistic_pred(w,images,labels):
     error_rate = np.sum(preds_bin!=labels)/n
     return result, preds_bin, error_rate
 
-def softmax_preprocessing(total_train_images, total_train_labels,total_test_images,total_test_labels,):
+def softmax_preprocessing(total_train_images, total_train_labels,total_test_images,total_test_labels,res):
     m = np.shape(total_train_images)[1]
     train_images = np.zeros((0, m))
     valid_images = np.zeros((0, m))
@@ -216,6 +221,8 @@ def softmax_preprocessing(total_train_images, total_train_labels,total_test_imag
     valid_labels = np.zeros((0, 10))
     test_images = np.zeros((0, m))
     test_labels = np.zeros((0, 10))
+
+    res.avg_x=np.zeros((10,28*28+1))
 
     for i in range(10):
         onehot = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
@@ -231,16 +238,18 @@ def softmax_preprocessing(total_train_images, total_train_labels,total_test_imag
         test_images=np.concatenate((test_images,ttmp_images))
         test_labels=np.concatenate((test_labels,np.matlib.repmat(onehot,np.shape(ttmp_images)[0],1)))
 
-    return train_images, train_labels,valid_images,valid_labels,test_images,test_labels
+        res.avg_x[i,:]=np.average(tmp_images[:tmp_n],axis=0)
+
+    return train_images, train_labels,valid_images,valid_labels,test_images,test_labels,res
 
 """
 Softmax Regression with Regularization
 """
-def softmax_regression(total_train_images, total_train_labels,total_test_images,total_test_labels,order=0):
+def softmax_regression(total_train_images, total_train_labels,total_test_images,total_test_labels):
 
     res=ExperimentResult()
-    train_images,train_labels,valid_images,valid_labels,test_images,test_labels=\
-        softmax_preprocessing(total_train_images,total_train_labels,total_test_images,total_test_labels)
+    train_images,train_labels,valid_images,valid_labels,test_images,test_labels,res=\
+        softmax_preprocessing(total_train_images,total_train_labels,total_test_images,total_test_labels,res)
     # m = np.shape(total_train_images)[1]
     # train_images=np.zeros((0,m))
     # valid_images=np.zeros((0,m))
@@ -266,9 +275,10 @@ def softmax_regression(total_train_images, total_train_labels,total_test_images,
     n = np.shape(train_images)[0]
 
     eta = cf.sm_eta
-    error_cnt = 0
     error_tol = cf.sm_error_tol
+    order=cf.sm_reg
 
+    error_cnt = 0
     prev_err = 100
     t = 0
     T = cf.sm_T
@@ -312,6 +322,7 @@ def softmax_regression(total_train_images, total_train_labels,total_test_images,
         res.train_loss.append(train_loss)
         res.valid_loss.append(valid_loss)
         res.test_loss.append(test_loss)
+        res.w_length.append(np.linalg.norm(w))
 
         t2 = time.time()
         if cf.debug:
@@ -329,7 +340,7 @@ def softmax_regression(total_train_images, total_train_labels,total_test_images,
     for i,wi in enumerate(w.T):
         weightPlot(wi,cf.sm_header+"_"+str(i))
 
-    res.weight_value=bestw
+    res.w_value=bestw
     res.best_train_err=best_tr_err
     res.best_valid_err=best_va_err
     res.best_test_err=best_te_err
@@ -389,8 +400,20 @@ def numberPlot(x,info="tmp"):
 def weightPlot(w,info="tmp"):
     vis_w = np.reshape(w[1:], (28, 28))
     plt.imshow(vis_w)
-    plt.savefig(cf.resdir+"fig_"+info+".png")
+    plt.savefig(cf.plotdir+info+".png")
     plt.close()
+
+def multiWeightPlot(best_w, avg_x,info="tmp"):
+
+    for i in range(10):
+        index=(i>=5)*10+i%5+1
+        plt.subplot(4,5,index)
+        plt.imshow(np.reshape(best_w[1:,i],(28,28)))
+        plt.subplot(4,5,index+5)
+        plt.imshow(np.reshape(avg_x[i,1:],(28,28)))
+    plt.savefig(cf.plotdir+info+".png")
+    plt.close()
+
 
 if __name__=="__main__":
 
@@ -403,26 +426,26 @@ if __name__=="__main__":
     #     # b = np.array([1, 0, 1, 0, 1, 0])
     #     # c = np.array([[1, 18, 25], [1, 8, 21], [1, 7, 38], [1, 3, 32]])
     #     # d = np.array([1, 0, 1, 0])
-    #     # logistic_regression(a,b,c,d,c,d,cf.regularization)
+    #     # logistic_regression(a,b,c,d,c,d)
     #
-    #     res=logistic_regression(train_images,train_labels,test_images,test_labels, cf.lg_reg)
+    #     res=logistic_regression(train_images,train_labels,test_images,test_labels)
     #
     #     # mine=100
     #     # bestS=0
     #     # for i in [0.1,0.01,0.001,0.0001,0.00001,0.000001]:
     #     #     cf.lg_lamda=i
-    #     #     err=logistic_regression(tr_img,tr_lbe,va_img,va_lbe,te_img,te_lbe,cf.lg_reg)
+    #     #     err=logistic_regression(tr_img,tr_lbe,va_img,va_lbe,te_img,te_lbe)
     #     #     if mine>err:
     #     #         mine=err
     #     #         bestS=i
     #     # print(mine,bestS)
     # else:
-    #     res=softmax_regression(train_images,train_labels,test_images,test_labels,cf.sm_reg)
+    #     res=softmax_regression(train_images,train_labels,test_images,test_labels)
 
     """Experiment Part"""
 
     # # Test logistic with regularization
-    # res=logistic_regression(total_train_images,total_train_labels,total_test_images,total_test_labels, cf.lg_reg)
+    # res=logistic_regression(total_train_images,total_train_labels,total_test_images,total_test_labels)
     # plt.plot(res.train_loss)
     # plt.plot(res.valid_loss)
     # plt.plot(res.test_loss)
@@ -435,7 +458,7 @@ if __name__=="__main__":
     #
 
     # # Test softmax
-    # res=softmax_regression(total_train_images,total_train_labels,total_test_images,total_test_labels,cf.sm_reg)
+    # res=softmax_regression(total_train_images,total_train_labels,total_test_images,total_test_labels)
     # plt.plot(res.train_loss)
     # plt.plot(res.valid_loss)
     # plt.plot(res.test_loss)
@@ -446,7 +469,106 @@ if __name__=="__main__":
     # plt.plot(res.test_err)
     # plt.savefig(cf.plotdir + "tmp.png")
 
-    
+    """Logistic Regression via Gradient Descent"""
+    # (after choosing best eta and gd method)
+    # for 2 vs 3, 2 vs 8
+    #     run logistic once
+    #     draw loss over train, valid, test among epochs
+    #     draw corr over train, valid, test among epochs
+    #     display weight as an image (without bias)
+    cf.debug=True
+    for num2 in [3,8]:
+        cf.select_num2 = num2
+        res=logistic_regression(total_train_images,total_train_labels,total_test_images,total_test_labels)
+        plt.plot(res.train_loss)
+        plt.plot(res.valid_loss)
+        plt.plot(res.test_loss)
+        plt.savefig(cf.plotdir+"lg_loss_2_"+str(num2)+".png")
+        plt.close()
 
+        plt.plot(1 - np.array(res.train_err))
+        plt.plot(1 - np.array(res.valid_err))
+        plt.plot(1 - np.array(res.test_err))
+        plt.savefig(cf.plotdir + "lg_corr_2_" + str(num2) + ".png")
+        plt.close()
+
+        weightPlot(res.w_value,"lg_wimg_2_"+str(num2))
+
+    cf.select_num2=3
+
+    """Logistic Regression (Regularization)"""
+    # (after choosing best eta and gd method)
+    # for L1, L2 norm
+    #     for lambda in [0.01, 0.001, 0.0001] (only 2 vs 3)
+    #         run logistic with regularization, save corr
+    #         over training and weight length among epochs,
+    #         and final test set err
+    #
+    #         draw final weight as image
+    #
+    # draw corr over training among epochs, for diff L and lambda
+    # draw w_len over among epochs, for diff L and lambda
+    # draw final test err among diff L and lambda
+    tmp1,tmp2=cf.lg_reg,cf.lg_lamda
+
+    slamda_list=[[0.1,0.01,0.001,0.0001],[1,0.1,0.01,0.001]]
+
+    for reg in [1,2]:
+        lamda_list=slamda_list[reg-1]
+        reg_rec = {}
+        tmp_err_list = []
+        for lamda in lamda_list:
+            cf.lg_reg,cf.lg_lamda=reg,lamda
+            reg_rec[lamda]=logistic_regression(
+                total_train_images,total_train_labels,total_test_images,total_test_labels)
+            weightPlot(reg_rec[lamda].w_value,"lg_reg_"+str(reg)+"_wimg_"+str(lamda))
+            tmp_err_list.append(reg_rec[lamda].best_test_err)
+
+        for lamda in lamda_list:
+            plt.plot(1-np.array(reg_rec[lamda].train_err))
+        plt.savefig(cf.plotdir + "lg_reg_"+str(reg)+"_tr_corr_all.png")
+        plt.close()
+
+        for lamda in lamda_list:
+            plt.plot(reg_rec[lamda].w_length)
+        plt.savefig(cf.plotdir + "lg_reg_"+str(reg)+"_tr_wlen_all.png")
+        plt.close()
+
+
+        plt.plot(np.log(lamda_list),tmp_err_list)
+        plt.savefig(cf.plotdir + "lg_reg_"+str(reg)+"_err_lamda.png")
+        plt.close()
+
+    cf.lg_reg,cf.lg_lamda=tmp1,tmp2
+
+    """Softmax Regression via Gradient Descent"""
+    # (after choosing best L1,L2 norm and lambda value)
+    # (make it clear which L1,L2 norm and which lambda using)
+    # run softmax only once
+    # draw loss over train, valid, test among epochs
+    # draw corr over train, valid, test among epochs
+    #(extra) draw image of weight for each digit,
+    # also avg from train, to make cmp in same fig
+    tmp_L,tmp_lamda=cf.sm_reg,cf.sm_lamda
+    best_L=2
+    best_lambda=0.001
+    cf.sm_reg, cf.sm_lamda = best_L, best_lambda
+
+    res=softmax_regression(total_train_images,total_train_labels,total_test_images,total_test_labels)
+    plt.plot(res.train_loss)
+    plt.plot(res.valid_loss)
+    plt.plot(res.test_loss)
+    plt.savefig(cf.plotdir+"sm_loss.png")
+    plt.close()
+
+    plt.plot(1-np.array(res.train_err))
+    plt.plot(1 - np.array(res.valid_err))
+    plt.plot(1-np.array(res.test_err))
+    plt.savefig(cf.plotdir+"sm_corr.png")
+    plt.close()
+
+    multiWeightPlot(res.w_value,res.avg_x,"sm_w_cmp")
+
+    cf.sm_reg, cf.sm_lamda=tmp_L, tmp_lamda
 
     print("Finished")
