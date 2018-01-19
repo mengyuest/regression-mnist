@@ -7,7 +7,6 @@ class cf:
     select_num2=3
 
     seed=1
-    load_from_raw=True
 
     very_large_number=1000
     very_small_number=0.00000001
@@ -30,10 +29,7 @@ class cf:
 
     first2k=False
     cal_loss=False
-    logistic=True
-    softmax=False
     debug=True
     resdir="result/"
     mplotdir = "result/plots/"
     plotdir="result/plots/"
-
